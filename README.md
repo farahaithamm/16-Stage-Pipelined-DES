@@ -10,17 +10,6 @@ Fully pipelined Verilog implementation of DES (64-bit block, 56-bit key) with pe
 - Round keys generated on the fly in each stage (no key storage)
 - Asynchronous active-low reset
 
-## Layout
-
-```
-DES-Verilog/
-├── rtl/                 Verilog RTL
-├── tb/tb_des_c.v        Self-checking testbench (DPI-C)
-├── tb/des.c            C reference model
-├── sim/run_c.do         QuestaSim run script
-└── docs/                Datapath, pipeline, and hierarchy diagrams
-```
-
 ## Interface
 
 | Signal | Dir | Width | Description |
@@ -48,6 +37,9 @@ F   = P( SBox( E(R) XOR K ) )
 
 After round 16 the halves are swapped, then the final permutation (`Inverse_IP`) gives `out`.
 
+### Stage data path
+![Stage data path](docs/datapath.png)
+
 **Subkeys:** the key goes through `PC1` into 28-bit halves C₀, D₀. The left-rotation amount `s_i` is 1 for rounds 1, 2, 9, 16 and 2 otherwise (total 28, so C₁₆ = C₀).
 
 | Mode | Subkey of stage *i* | Next C/D |
@@ -57,7 +49,7 @@ After round 16 the halves are swapped, then the final permutation (`Inverse_IP`)
 
 Decryption starts from K₁₆ = PC2(C₀, D₀) with no rotation, then walks the schedule backwards. The mode bit travels with its block, so each stage follows the mode of the block it holds.
 
-![Stage data path](docs/datapath.png)
+### Subkey generation
 ![Subkey generation](docs/subkeys.png)
 
 **Pipeline behavior**
@@ -70,6 +62,7 @@ Decryption starts from K₁₆ = PC2(C₀, D₀) with no rotation, then walks th
 
 ## Structure
 
+### Pipeline data flow
 ![Pipeline data flow](docs/pipeline.png)
 
 ```
@@ -109,14 +102,16 @@ DES
 | 3 | `P` | 1 per round | 32-bit permutation |
 | 4 | `S1` … `S8` | 1 each per round | Lookup tables inside `SBox` |
 
+## Module hierarchy
+
 ![Module hierarchy](docs/hierarchy.png)
 
 ## Verification
 
-**Testbench:** `tb_des` (`tb/tb_des_c.v`), self-checking, QuestaSim.
+**Testbench:** `tb_des` (`tb_des_c.v`), self-checking, QuestaSim.
 
 - **Scoreboard**
-  - *Reference model:* `tb/des.c`, called through DPI-C as `des_ref_c(data, key, enc)` when each operation is sent.
+  - *Reference model:* `des.c`, called through DPI-C as `des_ref_c(data, key, enc)` when each operation is sent.
   - *Expected-result pipeline:* 16-deep shift register of expected results and valid bits, advancing with the DUT.
   - *Checker:* on every falling clock edge, `done` must equal the last-stage valid bit, and `out` must equal the expected value when valid.
 - **Stimulus:** `send` issues one operation; `gap(n)` idles n cycles with `start` low while `in`, `key`, `encrypt` toggle randomly (inputs must be ignored).
@@ -137,22 +132,21 @@ DES
 
 ## Running
 
-Requires QuestaSim and `gcc`. From `sim/` in the Questa transcript:
+Requires QuestaSim and `gcc`. From the project folder:
 
 ```
 do run_c.do
 ```
 
-The script builds `../tb/des.c` as a DPI shared library (`-DDES_NO_MAIN`), compiles `../rtl/*.v` plus `../tb/tb_des_c.v`, loads the library with `-sv_lib` and runs the simulation.
+The script builds `des.c` as a DPI shared library (`-DDES_NO_MAIN`), compiles all RTL plus `tb_des_c.v`, loads the library with `-sv_lib` and runs the simulation.
 
 ## Files
 
-| Path | Content |
+| File | Content |
 |---|---|
-| `rtl/DES.v`, `rtl/Round.v`, `rtl/Round_Reg.v`, `rtl/Round_Function.v`, `rtl/Swap.v` | Top level, pipeline stage, stage register, round function, half swap |
-| `rtl/IP.v`, `rtl/Inverse_IP.v`, `rtl/PC1.v`, `rtl/PC2.v`, `rtl/E.v`, `rtl/P.v` | Permutation and expansion tables |
-| `rtl/Key_Left_Shift.v`, `rtl/Key_Right_Shift.v` | Key-schedule rotations |
-| `rtl/SBox.v`, `rtl/S1.v` … `rtl/S8.v` | Substitution boxes |
-| `tb/des.c` | C reference model |
-| `tb/tb_des_c.v`, `sim/run_c.do` | Testbench and Questa run script |
-| `docs/*.png` | Datapath, subkey, pipeline, and hierarchy figures |
+| `DES.v`, `Round.v`, `Round_Reg.v`, `Round_Function.v`, `Swap.v` | Top level, pipeline stage, stage register, round function, half swap |
+| `IP.v`, `Inverse_IP.v`, `PC1.v`, `PC2.v`, `E.v`, `P.v` | Permutation and expansion tables |
+| `Key_Left_Shift.v`, `Key_Right_Shift.v` | Key-schedule rotations |
+| `SBox.v`, `S1.v` … `S8.v` | Substitution boxes |
+| `des.c` | C reference model |
+| `tb_des_c.v`, `run_c.do` | Testbench and Questa run script |
